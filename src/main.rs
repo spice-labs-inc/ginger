@@ -5,13 +5,14 @@ use env_logger::Env;
 use log::{error, info};
 use openssl::symm::Mode;
 use openssl::{
-    pkey::Public,
     rand::rand_bytes,
-    rsa::{Padding, Rsa},
     symm::{Cipher, Crypter},
 };
 use pipe::{pipe, PipeReader};
 use reqwest::Url;
+use rsa::pkcs1::EncodeRsaPrivateKey;
+use rsa::pkcs8::{DecodePublicKey, LineEnding};
+use rsa::{Oaep, RsaPrivateKey, RsaPublicKey};
 use serde_json::Value;
 use tar::Builder;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
@@ -69,7 +70,7 @@ fn main() -> Result<()> {
                 } else {
                     Box::new(File::create(dest)?)
                 };
-                dest_file.write_all(&key)?;
+                dest_file.write_all(key.as_bytes())?;
             }
 
             _ => {}
@@ -241,16 +242,15 @@ impl Args {
     }
 }
 
-fn key_from_rsa_pub(pub_key: &str) -> Result<Rsa<Public>> {
-    let ret = Rsa::public_key_from_pem(pub_key.as_bytes())?;
+fn key_from_rsa_pub(pub_key: &str) -> Result<RsaPublicKey> {
+    let ret = RsaPublicKey::from_public_key_pem(pub_key)?;
     Ok(ret)
 }
 
-fn encrypt_with_public_key(pub_key: Rsa<Public>, to_encrypt: &[u8]) -> Result<Vec<u8>> {
-    let padding = Padding::PKCS1_OAEP;
-    let mut res = vec![0; pub_key.size() as usize];
-    let len = pub_key.public_encrypt(to_encrypt, &mut res, padding)?;
-    res.truncate(len);
+fn encrypt_with_public_key(pub_key: RsaPublicKey, to_encrypt: &[u8]) -> Result<Vec<u8>> {
+    let padding = Oaep::new::<sha2::Sha256>();
+    let mut rng = rand::thread_rng();
+    let res = pub_key.encrypt(&mut rng, padding, to_encrypt)?;
     Ok(res)
 }
 
@@ -261,7 +261,7 @@ fn create_zip<R: Read>(
     payload_mime_type: Option<String>,
     directory: Option<PathBuf>,
     return_key: bool,
-) -> Result<(PathBuf, Option<Vec<u8>>)> {
+) -> Result<(PathBuf, Option<String>)> {
     let mut directory = directory.unwrap_or_else(|| PathBuf::from("/tmp"));
     directory.push(format!("{}.zip", uuid));
     let file = File::create(directory.clone())?;
@@ -279,14 +279,18 @@ fn create_zip<R: Read>(
 
     // if we want a return key, write the public key into the zip and return
     // the PEM of the private key
-    let return_key: Option<Vec<u8>> = {
+    let return_key: Option<String> = {
         if return_key {
-            let rsa_key = Rsa::generate(4096)?;
-            let pub_key = rsa_key.public_key_to_pem()?;
+            use rsa::pkcs1::EncodeRsaPublicKey;
+            let mut rng = rand::thread_rng();
+            let rsa_key = RsaPrivateKey::new(&mut rng, 4096)?;
+            let pub_key = RsaPublicKey::from(&rsa_key).to_pkcs1_pem(LineEnding::LF)?;
+
             zip.start_file("return_key.pem", file_options.clone())?;
-            zip.write_all(&pub_key)?;
-            let pem = rsa_key.private_key_to_pem()?;
-            Some(pem)
+            zip.write_all(pub_key.as_bytes())?;
+            let pem = rsa_key.to_pkcs1_pem(LineEnding::LF)?;
+            let pem: &str = &pem;
+            Some(pem.to_string())
         } else {
             None
         }
@@ -466,7 +470,7 @@ fn random_bytes(len: usize) -> Result<Vec<u8>> {
 mod inner_test {
 
     use base64::prelude::*;
-    use openssl::rsa::Rsa;
+    
 
     const PUB_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA+q8QFhkrmIrsaiY7g2RJ
@@ -486,15 +490,21 @@ tN+7s5LN2ktxcugqDRzN8PiFhJ+udoU9LQJFtcaybme29IuuBu1eaMe4Z8YqyHJR
     #[test]
     fn test_encrypt() {
         let key = key_from_rsa_pub(PUB_KEY).expect("Should parse this key");
-        crate::encrypt_with_public_key(key, b"foo_bar").expect("Should encrypt");
+        let out = crate::encrypt_with_public_key(key, b"foo_bar").expect("Should encrypt");
+        println!("{}", BASE64_STANDARD.encode(out));
     }
 
     #[test]
+    #[cfg(not(debug_assertions))] // this takes a long time to run in debug mode, so only do in release mode
     fn test_create_private_key() {
-        let rsa_key = Rsa::generate(4096).expect("Should create an RSA private key");
-        let pub_key = rsa_key
-            .public_key_to_pem()
-            .expect("Should be able to get the PEM of the associate public key");
+        use rsa::{pkcs1::EncodeRsaPublicKey, pkcs8::LineEnding, RsaPrivateKey};
+        let mut rng = rand::thread_rng();
+        let rsa_key = RsaPrivateKey::new(&mut rng, 4096).expect("Should create an RSA private key");
+        let pub_key = rsa_key.to_public_key();
+        let pub_key = pub_key
+            .to_pkcs1_pem(LineEnding::LF)
+            .expect("Should make key a pem");
+
         assert!(
             pub_key.len() > 50,
             "Should get a reasonably long public key"
