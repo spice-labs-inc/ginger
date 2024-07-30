@@ -190,7 +190,12 @@ impl Args {
         thread::spawn(move || {
             if is_dir {
                 let mut b = Builder::new(write);
-                match b.append_dir_all("data", the_path) {
+                let mut tar_path = PathBuf::new();
+                tar_path.push("data");
+                for v in &the_path {
+                    tar_path.push(v);
+                }
+                match b.append_dir_all(tar_path, the_path) {
                     Ok(_) => {}
                     _ => {
                         return;
@@ -202,9 +207,7 @@ impl Args {
                     let mut in_buf = [0u8; 4096];
                     loop {
                         if let Ok(len) = f.read(&mut in_buf) {
-                            info!("Sending {} bytes", len);
                             if len == 0 {
-                                info!("Ending slurp...");
                                 return;
                             }
                             if write.write_all(&mut in_buf[0..len]).is_err() {
