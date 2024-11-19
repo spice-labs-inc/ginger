@@ -1,6 +1,6 @@
 [package]
-name = "sluice"
-version = "0.1.0"
+name = "ginger"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]

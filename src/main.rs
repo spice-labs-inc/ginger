@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use env_logger::Env;
 #[cfg(not(test))]
-use log::{error, info};
+use log::info;
 use openssl::symm::Mode;
 use openssl::{
     rand::rand_bytes,
@@ -18,14 +18,14 @@ use tar::Builder;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 use base64::prelude::*;
+#[cfg(test)]
+use std::println as info;
 use std::{
     fs::File,
     io::{stdout, Bytes, Cursor, Read, Seek, Write},
     path::PathBuf,
     thread,
 };
-#[cfg(test)]
-use std::{println as info, println as error};
 
 fn main() -> Result<()> {
     let env = Env::default()
@@ -36,11 +36,10 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let jwt = args.get_jwt()?;
-    let uuid = Args::jwt_to_uuid(&jwt)?;
     let pub_key_pem = args.get_pub_key()?;
-    let target_server = args.get_server()?;
+
     let return_key_dest = args.ret.clone();
+    let uuid = args.get_uuid()?;
 
     let (mut payload, mime_type) = args.get_payload()?;
     info!("Got enough info to create payload");
@@ -49,10 +48,15 @@ fn main() -> Result<()> {
         &pub_key_pem,
         &mut payload,
         Some(mime_type),
-        None,
+        if args.encrypt_only {Some(PathBuf::from("."))} else {None},
         return_key_dest.is_some(),
     )?;
+    if args.encrypt_only {
+        info!("Wrote encrypted file to {:?}", zip_file);
+    } else {
+    let jwt = args.get_jwt()?;
 
+    let target_server = args.get_server()?;
     let client = reqwest::blocking::Client::builder().timeout(None).build()?;
     let posted = client
         .post(target_server)
@@ -78,7 +82,7 @@ fn main() -> Result<()> {
     } else {
         bail!("Failed to send package {}", posted.status())
     }
-
+    }
     Ok(())
 }
 
@@ -116,6 +120,15 @@ struct Args {
     /// for upload
     #[arg(long, short)]
     pub payload: PathBuf,
+
+    /// Only encrypt using the key. Do not upload.
+    #[arg(long, short, action)]
+    pub encrypt_only: bool,
+
+    /// for encrypt_only operations, provide the uuid that would
+    /// otherwise be provided by the JWT
+    #[arg(long)]
+    pub uuid: Option<String>
 }
 
 impl Args {
@@ -136,14 +149,25 @@ impl Args {
     }
     pub fn get_jwt(&self) -> Result<String> {
         if let Some(jwt) = self.get_item_from_zip("jwt.txt") {
+            info!("Got jwt from zip {}", jwt);
             Ok(jwt)
         } else {
-            match &self.key {
+
+            match &self.jwt {
                 Some(s) => {
-                    let f = File::open(s)?;
-                    Args::bytes_to_string(f.bytes())
+                   Ok(s.clone())
                 }
-                None => bail!("Can't find the public key. Please use the `-k` flag"),
+                None => bail!("Can't find jwt. Please use the -jwt flag"),
+            }
+        }
+    }
+
+    pub fn get_uuid(&self) -> Result<String> {
+        match self.get_jwt()  {
+            Ok(jwt) => Args::jwt_to_uuid(&jwt),
+            Err(_) => match &self.uuid {
+                Some(uuid) => Ok(uuid.clone()),
+                _ => bail!("Must either provide a JWT or a uuid")
             }
         }
     }
@@ -473,7 +497,6 @@ fn random_bytes(len: usize) -> Result<Vec<u8>> {
 mod inner_test {
 
     use base64::prelude::*;
-    
 
     const PUB_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA+q8QFhkrmIrsaiY7g2RJ
