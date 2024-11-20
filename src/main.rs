@@ -20,6 +20,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 use base64::prelude::*;
 #[cfg(test)]
 use std::println as info;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs::File,
     io::{stdout, Bytes, Cursor, Read, Seek, Write},
@@ -48,40 +49,44 @@ fn main() -> Result<()> {
         &pub_key_pem,
         &mut payload,
         Some(mime_type),
-        if args.encrypt_only {Some(PathBuf::from("."))} else {None},
+        if args.encrypt_only {
+            Some(PathBuf::from("."))
+        } else {
+            None
+        },
         return_key_dest.is_some(),
     )?;
     if args.encrypt_only {
         info!("Wrote encrypted file to {:?}", zip_file);
     } else {
-    let jwt = args.get_jwt()?;
+        let jwt = args.get_jwt()?;
 
-    let target_server = args.get_server()?;
-    let client = reqwest::blocking::Client::builder().timeout(None).build()?;
-    let posted = client
-        .post(target_server)
-        .bearer_auth(jwt)
-        .body(File::open(zip_file)?)
-        .send()?;
+        let target_server = args.get_server()?;
+        let client = reqwest::blocking::Client::builder().timeout(None).build()?;
+        let posted = client
+            .post(target_server)
+            .bearer_auth(jwt)
+            .body(File::open(zip_file)?)
+            .send()?;
 
-    if posted.status().is_success() {
-        info!("Successfully sent bundle");
+        if posted.status().is_success() {
+            info!("Successfully sent bundle");
 
-        match (return_key_dest, return_key) {
-            (Some(dest), Some(key)) => {
-                let mut dest_file: Box<dyn Write> = if dest == "-" {
-                    Box::new(stdout())
-                } else {
-                    Box::new(File::create(dest)?)
-                };
-                dest_file.write_all(key.as_bytes())?;
+            match (return_key_dest, return_key) {
+                (Some(dest), Some(key)) => {
+                    let mut dest_file: Box<dyn Write> = if dest == "-" {
+                        Box::new(stdout())
+                    } else {
+                        Box::new(File::create(dest)?)
+                    };
+                    dest_file.write_all(key.as_bytes())?;
+                }
+
+                _ => {}
             }
-
-            _ => {}
+        } else {
+            bail!("Failed to send package {}", posted.status())
         }
-    } else {
-        bail!("Failed to send package {}", posted.status())
-    }
     }
     Ok(())
 }
@@ -128,7 +133,7 @@ struct Args {
     /// for encrypt_only operations, provide the uuid that would
     /// otherwise be provided by the JWT
     #[arg(long)]
-    pub uuid: Option<String>
+    pub uuid: Option<String>,
 }
 
 impl Args {
@@ -152,23 +157,20 @@ impl Args {
             info!("Got jwt from zip {}", jwt);
             Ok(jwt)
         } else {
-
             match &self.jwt {
-                Some(s) => {
-                   Ok(s.clone())
-                }
+                Some(s) => Ok(s.clone()),
                 None => bail!("Can't find jwt. Please use the -jwt flag"),
             }
         }
     }
 
     pub fn get_uuid(&self) -> Result<String> {
-        match self.get_jwt()  {
+        match self.get_jwt() {
             Ok(jwt) => Args::jwt_to_uuid(&jwt),
             Err(_) => match &self.uuid {
                 Some(uuid) => Ok(uuid.clone()),
-                _ => bail!("Must either provide a JWT or a uuid")
-            }
+                _ => bail!("Must either provide a JWT or a uuid"),
+            },
         }
     }
 
@@ -290,7 +292,14 @@ fn create_zip<R: Read>(
     return_key: bool,
 ) -> Result<(PathBuf, Option<String>)> {
     let mut directory = directory.unwrap_or_else(|| PathBuf::from("/tmp"));
-    directory.push(format!("{}.zip", uuid));
+    directory.push(format!(
+        "{}-{}.zip",
+        uuid,
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis()
+    ));
     let file = File::create(directory.clone())?;
     let mut zip = ZipWriter::new(file);
     let file_options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
