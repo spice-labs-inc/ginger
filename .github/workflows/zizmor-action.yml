@@ -1,0 +1,12 @@
+jobs:
+  run_zizmor_checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Use custom Zizmor GitHub Action
+        uses: spice-labs-inc/zizmor
+        with:
+          rust-version: "1.84.0"
