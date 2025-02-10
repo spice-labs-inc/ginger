@@ -99,25 +99,25 @@ struct Args {
     #[arg(long, short)]
     pub zipin: Option<PathBuf>,
 
-    /// the JWT to use to communicate with the server (if `zipin` provided, that's authoritative)
+    /// The JWT to use to communicate with the server (if `zipin` provided, that's authoritative)
     #[arg(long, short)]
     pub jwt: Option<String>,
 
-    /// the file that contains the public key PEM used to encrypt the upload
+    /// The file that contains the public key PEM used to encrypt the upload
     /// if `zipin` contains the key, this option with be ignored
     #[arg(long, short)]
     pub key: Option<PathBuf>,
 
-    /// the address of the server to post the results to
+    /// The address of the server to post the results to
     /// /// if `zipin` contains the server, this option with be ignored
     #[arg(long, short)]
     pub server: Option<Url>,
 
-    /// generate a public/private keypair to use to encrypt returned information.
-    /// If the value is `-`, the private key PEM will be written to stdout.
+    /// Generate a public/private key pair to use to encrypt returned information.
+    /// If the value is `-`, the private key PEM will be written to standard output.
     /// If the value is any other string, a new file will be created and the
     /// private key PEM will be written to the file. If there is a problem writing
-    /// to the file, the PEM will be written to stdout
+    /// to the file, the PEM will be written to standard output.
     #[arg(long, short)]
     pub ret: Option<String>,
 
@@ -131,7 +131,7 @@ struct Args {
     #[arg(long, short, action)]
     pub encrypt_only: bool,
 
-    /// for encrypt_only operations, provide the uuid that would
+    /// For encrypt_only operations, provide the uuid that would
     /// otherwise be provided by the JWT
     #[arg(long)]
     pub uuid: Option<String>,
