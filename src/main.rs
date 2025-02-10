@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use env_logger::Env;
 #[cfg(not(test))]
@@ -64,10 +64,11 @@ fn main() -> Result<()> {
         let target_server = args.get_server()?;
         let client = reqwest::blocking::Client::builder().timeout(None).build()?;
         let posted = client
-            .post(target_server)
+            .post(target_server.clone())
             .bearer_auth(jwt)
-            .body(File::open(zip_file)?)
-            .send()?;
+            .body(File::open(&zip_file)?)
+            .send()
+            .with_context(|| format!("uploading {:?} to {:?}", zip_file, target_server))?;
 
         if posted.status().is_success() {
             info!("Successfully sent bundle");
@@ -153,7 +154,7 @@ impl Args {
         bail!("Could not find `uuid` entry in {:?}", parsed);
     }
     pub fn get_jwt(&self) -> Result<String> {
-        if let Some(jwt) = self.get_item_from_zip("jwt.txt") {
+        if let Some(jwt) = self.get_item_from_zip("jwt.txt")? {
             info!("Got jwt from zip {}", jwt);
             Ok(jwt)
         } else {
@@ -175,7 +176,7 @@ impl Args {
     }
 
     pub fn get_pub_key(&self) -> Result<String> {
-        if let Some(pem) = self.get_item_from_zip("pub_key.pem") {
+        if let Some(pem) = self.get_item_from_zip("pub_key.pem")? {
             Ok(pem)
         } else {
             match &self.key {
@@ -189,7 +190,7 @@ impl Args {
     }
 
     pub fn get_server(&self) -> Result<Url> {
-        if let Some(server) = self.get_item_from_zip("server.txt") {
+        if let Some(server) = self.get_item_from_zip("server.txt")? {
             Url::parse(&server)
                 .map_err(|e| anyhow::anyhow!("Failed to parse {} with error {}", server, e))
         } else {
@@ -252,12 +253,18 @@ impl Args {
         Ok((read, mime_type.to_string()))
     }
 
-    fn get_item_from_zip(&self, item_name: &str) -> Option<String> {
-        let path = self.clone().zipin?;
-        let file = File::open(path).ok()?;
-        let mut zip = ZipArchive::new(file).ok()?;
-        let item = zip.by_name(item_name).ok()?;
-        Args::bytes_to_string(item.bytes()).ok()
+    fn get_item_from_zip(&self, item_name: &str) -> Result<Option<String>> {
+        if let Some(path) = self.clone().zipin {
+            let file = File::open(&path)?;
+            Ok({
+                let mut zip =
+                    ZipArchive::new(file).with_context(|| format!("Zip file {:}", path.to_string_lossy()))?;
+                let item = zip.by_name(item_name).with_context(|| format!("Reading {:} from {:}", item_name, path.to_string_lossy()))?;
+                Args::bytes_to_string(item.bytes()).ok()
+            })
+        } else {
+            Ok(None)
+        }
     }
 
     fn bytes_to_string<R: Read>(bytes: Bytes<R>) -> Result<String> {
