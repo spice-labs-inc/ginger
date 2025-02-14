@@ -86,7 +86,13 @@ fn main() -> Result<()> {
                 _ => {}
             }
         } else {
-            bail!("Failed to send package {}", posted.status())
+            let status = posted.status();
+            let body = posted.text();
+            if let Ok(body) = body {
+                bail!("Failed to send package: {:?} {:?}", status, body)
+            } else {
+                bail!("Failed to send package: {:?}", status)
+            }
         }
     }
     Ok(())
