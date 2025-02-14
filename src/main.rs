@@ -86,7 +86,13 @@ fn main() -> Result<()> {
                 _ => {}
             }
         } else {
-            bail!("Failed to send package {}", posted.status())
+            let status = posted.status();
+            let body = posted.text();
+            if let Ok(body) = body {
+                bail!("Failed to send package: {:?} {:?}", status, body)
+            } else {
+                bail!("Failed to send package: {:?}", status)
+            }
         }
     }
     Ok(())
@@ -257,9 +263,11 @@ impl Args {
         if let Some(path) = self.clone().zipin {
             let file = File::open(&path)?;
             Ok({
-                let mut zip =
-                    ZipArchive::new(file).with_context(|| format!("Zip file {:}", path.to_string_lossy()))?;
-                let item = zip.by_name(item_name).with_context(|| format!("Reading {:} from {:}", item_name, path.to_string_lossy()))?;
+                let mut zip = ZipArchive::new(file)
+                    .with_context(|| format!("Zip file {:}", path.to_string_lossy()))?;
+                let item = zip.by_name(item_name).with_context(|| {
+                    format!("Reading {:} from {:}", item_name, path.to_string_lossy())
+                })?;
                 Args::bytes_to_string(item.bytes()).ok()
             })
         } else {
