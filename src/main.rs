@@ -86,7 +86,7 @@ fn main() -> Result<()> {
                 _ => {}
             }
         } else {
-            bail!("Failed to send package {}", posted.status())
+            bail!("Failed to send package {} {}", posted.status(),String::from_utf8( posted.bytes()?.iter().map(|b| *b).collect())?)
         }
     }
     Ok(())
