@@ -1,16 +1,16 @@
-FROM ubuntu
+FROM alpine:3.21 AS builder
+LABEL MAINTAINER="ext-engineering@spicelabs.io"
 
-RUN apt-get update
-RUN apt-get install -y perl make curl
-RUN apt-get install -y gcc
-RUN apt-get install -y gocryptfs
-RUN apt-get install -y kmod
-RUN apt-get install -y module-assistant
-RUN apt-get install -y fuse3
-RUN apt install --reinstall linux-modules-$(uname -r) -y
+RUN apk add perl make curl gcc rustup musl-dev
 
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+RUN rustup-init -y
 
+ADD . /src/ginger
+WORKDIR /src/ginger
+
+ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo build --release
 
-CMD ["cargo", "run", "--release", "--"]
+FROM alpine:3.21
+COPY --from=builder /src/ginger/target/release/ginger /usr/bin/ginger
+ENTRYPOINT ["/usr/bin/ginger"]
