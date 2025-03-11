@@ -1,6 +1,6 @@
 [package]
 name = "ginger"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [dependencies]
@@ -37,3 +37,5 @@ rand = "=0.8.5"
 zip = {version="2.2", features=["deflate"]}
 pipe = "0.4.0"
 tar = "0.4"
+
+chrono = "0.4"
