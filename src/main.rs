@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
+
 use clap::Parser;
 use env_logger::Env;
 #[cfg(not(test))]
@@ -20,6 +21,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 use base64::prelude::*;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::io::BufReader;
 #[cfg(test)]
 use std::println as info;
@@ -61,7 +63,10 @@ fn main() -> Result<()> {
         },
         return_key_dest.is_some(),
     )?;
-    info!("Important! SHA256 hash of bundle is {}", build_sha256_string(File::open(zip_file.clone())?)?);
+    info!(
+        "Important! SHA256 hash of bundle is {}",
+        build_sha256_string(File::open(zip_file.clone())?)?
+    );
     if args.encrypt_only {
         info!("Wrote encrypted file to {:?}", zip_file);
     } else {
@@ -193,7 +198,6 @@ impl Args {
     }
     pub fn get_jwt(&self) -> Result<String> {
         if let Some(jwt) = self.get_item_from_zip("jwt.txt")? {
-            info!("Got jwt from zip {}", jwt);
             Ok(jwt)
         } else {
             match &self.jwt {
@@ -252,99 +256,15 @@ impl Args {
 
         match &mime_type as &str {
             "application/vnd.info.deployevent" => {
-                self.validate_as_deploy_events()?;
+                validate_as_deploy_events(&self.payload)?;
             }
             "application/vnd.cc.bigtent" => {
-                self.validate_as_clusters()?;
+                validate_as_clusters(&self.payload)?;
             }
             _ => {}
         }
 
         Ok(mime_type)
-    }
-
-    fn all_files(from: PathBuf) -> Result<Vec<PathBuf>> {
-        let mut ret = vec![];
-
-        if from.is_file() {
-            ret.push(from);
-        } else if from.is_dir() {
-            for dir_entry in from.read_dir()? {
-                let entry = dir_entry?.path();
-                if entry.is_file() {
-                    ret.push(entry);
-                } else if entry.is_dir() {
-                    let mut dir_files = Args::all_files(entry)?;
-                    ret.append(&mut dir_files);
-                }
-            }
-        }
-
-        Ok(ret)
-    }
-
-    fn valid_deploy_event(file: PathBuf) -> Result<bool> {
-        let maybe_a_map: Result<HashMap<String, serde_json::Value>, serde_json::Error> =
-            serde_json::from_reader(File::open(&file)?);
-        match maybe_a_map {
-            Ok(map) => {
-                return Ok({
-                    is_map_legit_deploy_event(&map)?;
-                    true
-                })
-            }
-            Err(_) => {
-                let maybe_array_of_map: Result<
-                    Vec<HashMap<String, serde_json::Value>>,
-                    serde_json::Error,
-                > = serde_json::from_reader(File::open(&file)?);
-                match maybe_array_of_map {
-                    Ok(am) => {
-                        for m in am {
-                            is_map_legit_deploy_event(&m)?;
-                        }
-                        Ok(true)
-                    }
-                    Err(_) => return Ok(false),
-                }
-            }
-        }
-    }
-
-    /// validate that at least one of the entries is a valid deploy event
-    fn validate_as_deploy_events(&self) -> Result<()> {
-        for file in Args::all_files(self.payload.clone())? {
-            if file.ends_with(".json") {
-                if Args::valid_deploy_event(file)? {
-                    return Ok(());
-                }
-            }
-        }
-
-        bail!(
-            "No `.json` files found and at least one JSON file must be present for deploy events"
-        );
-    }
-
-    fn validate_as_clusters(&self) -> Result<()> {
-        let mut grc = false;
-        let mut gri = false;
-        let mut grd = false;
-        for file in Args::all_files(self.payload.clone())? {
-            if file.ends_with(".grc") {
-                grc = true;
-            } else if file.ends_with(".grd") {
-                grd = true;
-            } else if file.ends_with(".gri") {
-                gri = true;
-            }
-        }
-
-        if grc && gri && grd {
-            Ok(())
-        } else {
-            bail!("A cluster must contain at least one of `.grc`, `.grd`, and `.gri` files");
-        }
     }
 
     pub fn get_payload(&self) -> Result<PipeReader> {
@@ -415,6 +335,110 @@ impl Args {
 
         Ok(str)
     }
+}
+
+fn all_files(from: &PathBuf) -> Result<Vec<PathBuf>> {
+    let mut ret = vec![];
+
+    if from.is_file() {
+        ret.push(from.clone());
+    } else if from.is_dir() {
+        for dir_entry in from.read_dir()? {
+            let entry = dir_entry?.path();
+            if entry.is_file() {
+                ret.push(entry);
+            } else if entry.is_dir() {
+                let mut dir_files = all_files(&entry)?;
+                ret.append(&mut dir_files);
+            }
+        }
+    }
+
+    Ok(ret)
+}
+
+fn from_option_os_str<'a>(from: Option<&'a OsStr>) -> Option<&'a str> {
+    match from {
+        Some(os_str) => os_str.to_str(),
+        None => None,
+    }
+}
+
+fn valid_deploy_event(file: PathBuf) -> Result<bool> {
+    let maybe_a_map: Result<HashMap<String, serde_json::Value>, serde_json::Error> =
+        serde_json::from_reader(File::open(&file)?);
+    match maybe_a_map {
+        Ok(map) => {
+            return Ok({
+                is_map_legit_deploy_event(&map)?;
+                true
+            })
+        }
+        Err(_) => {
+            let maybe_array_of_map: Result<
+                Vec<HashMap<String, serde_json::Value>>,
+                serde_json::Error,
+            > = serde_json::from_reader(File::open(&file)?);
+            match maybe_array_of_map {
+                Ok(am) => {
+                    for m in am {
+                        is_map_legit_deploy_event(&m)?;
+                    }
+                    Ok(true)
+                }
+                Err(_) => {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+}
+
+/// validate that at least one of the entries is a valid deploy event
+fn validate_as_deploy_events(path: &PathBuf) -> Result<()> {
+    for file in all_files(path)? {
+        let ext = from_option_os_str(file.extension());
+        if ext == Some("json") {
+            if valid_deploy_event(file)? {
+                return Ok(());
+            }
+        }
+    }
+
+    bail!("No `.json` files found and at least one JSON file must be present for deploy events");
+}
+
+#[test]
+fn test_validate_deploy_events() {
+    validate_as_deploy_events(&PathBuf::from("./sample_data")).expect("Get and validate JSON");
+    validate_as_deploy_events(&PathBuf::from("./sample_data/bt/")).expect_err("no json");
+}
+
+fn validate_as_clusters(path: &PathBuf) -> Result<()> {
+    let mut grc = false;
+    let mut gri = false;
+    let mut grd = false;
+    for file in all_files(path)? {
+        let extension = from_option_os_str(file.extension());
+        match extension {
+            Some("grc") => grc = true,
+            Some("grd") => grd = true,
+            Some("gri") => gri = true,
+            _ => {}
+        }
+    }
+
+    if grc && gri && grd {
+        Ok(())
+    } else {
+        bail!("A cluster must contain at least one of `.grc`, `.grd`, and `.gri` files");
+    }
+}
+
+#[test]
+fn test_validate_bt_events() {
+    validate_as_clusters(&PathBuf::from("./sample_data")).expect("Get and validate cluster");
+    validate_as_clusters(&PathBuf::from("./sample_data/de/")).expect_err("no deploy events");
 }
 
 pub fn to_hex(bytes: &[u8]) -> String {
