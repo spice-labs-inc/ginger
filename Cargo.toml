@@ -1,6 +1,6 @@
 [package]
 name = "ginger"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 
 [dependencies]
@@ -31,7 +31,7 @@ base64 = "0.22.1"
 openssl = { version = "0.10", features = ["vendored"] } # For streaming AES
 rsa = "0.9" # Gets us OAEP 
 sha2 = "0.10.8"
-rand = "=0.8.5"
+rand = "=0.8.5" # this must be kept to the version for rsa/openssl compatibility
 
 # Zip
 zip = {version="2.2", features=["deflate"]}
