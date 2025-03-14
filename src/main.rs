@@ -1,3 +1,17 @@
+/* Copyright 2025 Spice Labs, Inc. & Contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License. */
+
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 
@@ -12,9 +26,8 @@ use openssl::{
 };
 use pipe::{pipe, PipeReader};
 use reqwest::Url;
-use rsa::pkcs1::EncodeRsaPrivateKey;
-use rsa::pkcs8::{DecodePublicKey, LineEnding};
-use rsa::{Oaep, RsaPrivateKey, RsaPublicKey};
+use rsa::pkcs8::DecodePublicKey;
+use rsa::{Oaep, RsaPublicKey};
 use serde_json::Value;
 use tar::Builder;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
@@ -28,7 +41,7 @@ use std::println as info;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs::File,
-    io::{stdout, Bytes, Cursor, Read, Seek, Write},
+    io::{Bytes, Cursor, Read, Seek, Write},
     path::PathBuf,
     thread,
 };
@@ -44,12 +57,11 @@ fn main() -> Result<()> {
 
     let pub_key_pem = args.get_pub_key()?;
 
-    let return_key_dest = args.ret.clone();
     let uuid = args.get_uuid()?;
 
     let mut payload = args.get_payload()?;
     info!("Got enough info to create payload");
-    let (zip_file, return_key) = create_zip(
+    let zip_file = create_zip(
         &uuid,
         &pub_key_pem,
         &mut payload,
@@ -61,7 +73,6 @@ fn main() -> Result<()> {
         } else {
             None
         },
-        return_key_dest.is_some(),
     )?;
     info!(
         "Important! SHA256 hash of bundle is {}",
@@ -83,19 +94,6 @@ fn main() -> Result<()> {
 
         if posted.status().is_success() {
             info!("Successfully sent bundle");
-
-            match (return_key_dest, return_key) {
-                (Some(dest), Some(key)) => {
-                    let mut dest_file: Box<dyn Write> = if dest == "-" {
-                        Box::new(stdout())
-                    } else {
-                        Box::new(File::create(dest)?)
-                    };
-                    dest_file.write_all(key.as_bytes())?;
-                }
-
-                _ => {}
-            }
         } else {
             let status = posted.status();
             let body = posted.text();
@@ -129,14 +127,6 @@ struct Args {
     /// /// if `zipin` contains the server, this option with be ignored
     #[arg(long, short)]
     pub server: Option<Url>,
-
-    /// Generate a public/private key pair to use to encrypt returned information.
-    /// If the value is `-`, the private key PEM will be written to standard output.
-    /// If the value is any other string, a new file will be created and the
-    /// private key PEM will be written to the file. If there is a problem writing
-    /// to the file, the PEM will be written to standard output.
-    #[arg(long, short)]
-    pub ret: Option<String>,
 
     /// The path to the payload to upload. It can be an individual file
     /// or a directory. If it's a directory, the contents will be TARed
@@ -549,8 +539,7 @@ fn create_zip<R: Read>(
     payload_mime_type: String,
     comment: Option<String>,
     directory: Option<PathBuf>,
-    return_key: bool,
-) -> Result<(PathBuf, Option<String>)> {
+) -> Result<PathBuf> {
     let mut directory = directory.unwrap_or_else(|| PathBuf::from("/tmp"));
     directory.push(format!(
         "{}-{}.zip",
@@ -604,25 +593,6 @@ fn create_zip<R: Read>(
         zip.write_all(b"1")?;
     }
 
-    // if we want a return key, write the public key into the zip and return
-    // the PEM of the private key
-    let return_key: Option<String> = {
-        if return_key {
-            use rsa::pkcs1::EncodeRsaPublicKey;
-            let mut rng = rand::thread_rng();
-            let rsa_key = RsaPrivateKey::new(&mut rng, 4096)?;
-            let pub_key = RsaPublicKey::from(&rsa_key).to_pkcs1_pem(LineEnding::LF)?;
-
-            zip.start_file("return_key.pem", file_options.clone())?;
-            zip.write_all(pub_key.as_bytes())?;
-            let pem = rsa_key.to_pkcs1_pem(LineEnding::LF)?;
-            let pem: &str = &pem;
-            Some(pem.to_string())
-        } else {
-            None
-        }
-    };
-
     let secret_key = gen_aes_key()?;
     {
         let pub_key = key_from_rsa_pub(&pub_key_pem)?;
@@ -672,7 +642,7 @@ fn create_zip<R: Read>(
     info!("Wrote payload");
 
     zip.flush()?;
-    Ok((directory, return_key))
+    Ok(directory)
 }
 
 fn aes_encrypt<R: Read, W: Write>(
