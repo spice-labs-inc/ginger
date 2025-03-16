@@ -1,4 +1,4 @@
-name: Publish Rust Docker Images
+name: Publish Container Images
 
 on:
   push:
@@ -18,7 +18,7 @@ env:
 
 jobs:
   push_to_registry:
-    name: Publish Docker Images to Docker Hub and GHCR
+    name: Push Docker Image to Docker Hub and GHCR.io
     runs-on: ubuntu-24.04
     permissions:
       packages: write
@@ -88,4 +88,3 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-
