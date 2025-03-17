@@ -93,9 +93,3 @@ jobs:
           subject-name: ${{ env.GHCR_REGISTRY }}/${{ github.event.repository.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-
-      - name: Store binary with workflow
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: target/release/ginger
