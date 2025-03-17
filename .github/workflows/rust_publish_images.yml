@@ -18,6 +18,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   DOCKERHUB_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
 
+permissions:
+  packages: write
+  contents: write  # Needed for updating releases
+  attestations: write
+  id-token: write
+
 jobs:
   push_to_registry:
     name: Push Docker image to Docker Hub and GHCR
@@ -26,11 +32,6 @@ jobs:
       github.event_name == 'release' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
-    permissions:
-      packages: write
-      contents: read
-      attestations: write
-      id-token: write
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,11 +43,22 @@ jobs:
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-
 
-      - name: Build project
+      - name: Build Rust project
         run: cargo build --release
 
       - name: Save binary artifact
@@ -71,7 +83,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Github Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.GHCR_REGISTRY }}
@@ -89,7 +101,7 @@ jobs:
             type=semver,pattern={{version}}
             type=raw,value=${{ env.version }}
 
-      - name: Build and Push Docker image
+      - name: Build and Push Docker Image
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -112,3 +124,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: target/release/ginger
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
