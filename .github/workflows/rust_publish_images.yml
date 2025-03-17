@@ -18,12 +18,6 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   DOCKERHUB_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
 
-permissions:
-  packages: write
-  contents: write  # Needed for updating releases
-  attestations: write
-  id-token: write
-
 jobs:
   push_to_registry:
     name: Push Docker image to Docker Hub and GHCR
@@ -32,6 +26,11 @@ jobs:
       github.event_name == 'release' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -43,22 +42,11 @@ jobs:
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
-      - name: Cache Cargo registry and build
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            rust-${{ runner.os }}-
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build Rust project
+      - name: Build project
         run: cargo build --release
 
       - name: Save binary artifact
@@ -76,14 +64,13 @@ jobs:
             echo "version=$(echo $GITHUB_REF | awk -F'/' '{print $3}')" >> "$GITHUB_ENV"
           fi
           echo "short_git_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Log in to Github Container Registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.GHCR_REGISTRY }}
@@ -100,8 +87,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=${{ env.version }}
-
-      - name: Build and Push Docker Image
+      - name: Build and Push Docker image
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -124,5 +110,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: target/release/ginger
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
