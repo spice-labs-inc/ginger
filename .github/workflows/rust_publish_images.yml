@@ -1,17 +1,9 @@
 name: Publish Rust Container Images
 
 on:
-  release:
-    types: [published]
-  workflow_run:
-    workflows: ["Rust Build & Test"]
-    types: [completed]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version number (e.g., 1.0.0)"
-        required: true
-        type: string
+  push:
+    # Publish semver tags as releases.
+    tags: [ 'v*.*.*' ]
 
 env:
   GHCR_REGISTRY: ghcr.io
@@ -22,10 +14,7 @@ jobs:
   push_to_registry:
     name: Push Docker image to Docker Hub and GHCR
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'release' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      github.event_name == 'workflow_dispatch'
+
     permissions:
       packages: write
       contents: read
@@ -58,12 +47,10 @@ jobs:
       - name: Declare some variables
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_ENV"
-          else
-            echo "version=$(echo $GITHUB_REF | awk -F'/' '{print $3}')" >> "$GITHUB_ENV"
-          fi
+          # GITHUB_REF = refs/tags/vx.y.z
+          echo "version=$(echo $GITHUB_REF | awk -F'/' '{print $3}')" >> "$GITHUB_ENV"
           echo "short_git_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
+          
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -82,11 +69,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.GHCR_REGISTRY }}/${{ github.event.repository.name }}
             ${{ env.DOCKERHUB_NAMESPACE }}/${{ github.event.repository.name }}
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=${{ env.version }}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            
       - name: Build and Push Docker image
         id: push
         uses: docker/build-push-action@v6
@@ -101,12 +90,12 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ env.GHCR_REGISTRY }}/${{ github.event.repository.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-      - name: Upload binary to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+      - name: Store binary with workflow
+        uses: actions/upload-artifact@v4
         with:
-          files: target/release/ginger
+          name: dist
+          path: target/release/ginger
