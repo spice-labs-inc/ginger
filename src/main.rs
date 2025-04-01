@@ -31,6 +31,8 @@ use rsa::pkcs8::DecodePublicKey;
 use rsa::{Oaep, RsaPublicKey};
 use serde_json::Value;
 use tar::Builder;
+use thousands::Separable;
+use walkdir::WalkDir;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 use base64::prelude::*;
@@ -209,7 +211,12 @@ impl Args {
             Ok(jwt)
         } else {
             match &self.jwt {
-                Some(s) => Ok(s.clone()),
+                Some(s) => {
+                    let mut file = File::open(s)?;
+                    let mut v = vec![];
+                    file.read_to_end(&mut v)?;
+                    Ok(String::from_utf8(v)?)
+                }
                 None => bail!("Can't find jwt. Please use the -jwt flag"),
             }
         }
@@ -217,7 +224,8 @@ impl Args {
 
     pub fn get_jwt_as_value(&self) -> Result<Value> {
         let jwt = self.get_jwt()?;
-        Args::jwt_to_value(&jwt)
+        let ret = Args::jwt_to_value(&jwt);
+        ret
     }
 
     pub fn get_uuid(&self) -> Result<String> {
@@ -231,6 +239,11 @@ impl Args {
     }
 
     pub fn is_not_expired(&self) -> Result<bool> {
+        // if we are only encrypting the payload, ignore any issues with the JWT's
+        // expiration
+        if self.encrypt_only {
+            return Ok(true);
+        }
         if let Ok(Ok(Value::Number(exp))) = self
             .get_jwt_as_value()
             .map(|json| key_as_value(&json, vec!["exp"]))
@@ -315,6 +328,9 @@ impl Args {
     }
 
     pub fn get_payload(&self) -> Result<PipeReader> {
+        if !self.payload.exists() {
+            bail!("The payload {:?} does not exist", self.payload);
+        }
         let is_dir = self.payload.is_dir();
         let the_path = self.payload.to_path_buf();
 
@@ -322,18 +338,50 @@ impl Args {
 
         thread::spawn(move || {
             if is_dir {
+                let root_file_name = the_path.to_str().expect("Should be able to get root path");
                 let mut b = Builder::new(write);
                 let mut tar_path = PathBuf::new();
                 tar_path.push("data");
                 for v in &the_path {
                     tar_path.push(v);
                 }
-                match b.append_dir_all(tar_path, the_path) {
-                    Ok(_) => {}
-                    _ => {
-                        return;
+                for file in WalkDir::new(&the_path).into_iter() {
+                    match file {
+                        Ok(f) => {
+                            if f.file_type().is_file() {
+                                let file_name = f
+                                    .clone()
+                                    .into_path()
+                                    .to_str()
+                                    .expect("Should get file name")
+                                    .to_string();
+                                let trimmed_name = &file_name[root_file_name.len()..];
+
+                                info!(
+                                    "Appending {} to encrypted tar file, {} bytes",
+                                    trimmed_name,
+                                    f.clone()
+                                        .into_path()
+                                        .metadata()
+                                        .unwrap()
+                                        .len()
+                                        .separate_with_commas()
+                                );
+
+                                match b.append_path_with_name(f.into_path(), trimmed_name) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        panic!("Failed to tar {:?}, error {:?}", the_path, e);
+                                    }
+                                };
+                            }
+                        }
+                        Err(e) => {
+                            error!("Walking directory failed {:?}", e);
+                        }
                     }
-                };
+                }
+                info!("Finishing archiving");
                 let _ = b.finish();
             } else {
                 if let Ok(mut f) = File::open(the_path) {

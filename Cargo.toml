@@ -37,5 +37,6 @@ rand = "=0.8.5" # this must be kept to the version for rsa/openssl compatibility
 zip = {version="2.5", features=["deflate"]}
 pipe = "0.4.0"
 tar = "0.4"
+walkdir = "2.5"
 
 chrono = "0.4"
