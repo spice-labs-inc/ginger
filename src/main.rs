@@ -230,7 +230,8 @@ impl Args {
                     file.read_to_end(&mut v)?;
                     Ok(String::from_utf8(v)?)
                 }
-                Some(s) => Ok(s.clone()),
+                Some(s) if Args::jwt_to_value(s).is_ok() => Ok(s.clone()),
+                Some(s) => bail!("{} is neither a valid JWT nor a file containing a valid JWT", s),
                 None => bail!("Can't find jwt. Please use the -jwt flag"),
             }
         }
