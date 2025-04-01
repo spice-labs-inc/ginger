@@ -25,7 +25,7 @@ use openssl::{
     rand::rand_bytes,
     symm::{Cipher, Crypter},
 };
-use pipe::{pipe, PipeReader};
+use pipe::{pipe, PipeReader, PipeWriter};
 use reqwest::Url;
 use rsa::pkcs8::DecodePublicKey;
 use rsa::{Oaep, RsaPublicKey};
@@ -41,6 +41,7 @@ use std::ffi::OsStr;
 use std::io::BufReader;
 #[cfg(test)]
 use std::println as info;
+use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs::File,
@@ -62,7 +63,7 @@ fn main() -> Result<()> {
 
     let uuid = args.get_uuid()?;
 
-    let mut payload = args.get_payload()?;
+    let (mut payload, handle) = args.get_payload()?;
     info!("Got enough info to create payload");
 
     match args.is_not_expired() {
@@ -90,6 +91,13 @@ fn main() -> Result<()> {
             None
         },
     )?;
+
+    match handle.join() {
+        Ok(Ok(_)) => info!("Successfully wrote data"),
+        Ok(Err(e)) => bail!("Failed to write data {:?}", e),
+        Err(e) => bail!("Failed to write data {:?}", e),
+    }
+
     info!(
         "Important! SHA256 hash of bundle is {}",
         build_sha256_string(File::open(zip_file.clone())?)?
@@ -211,12 +219,18 @@ impl Args {
             Ok(jwt)
         } else {
             match &self.jwt {
-                Some(s) => {
+                Some(s)
+                    if {
+                        let pb = PathBuf::from(s);
+                        pb.exists() && pb.is_file()
+                    } =>
+                {
                     let mut file = File::open(s)?;
                     let mut v = vec![];
                     file.read_to_end(&mut v)?;
                     Ok(String::from_utf8(v)?)
                 }
+                Some(s) => Ok(s.clone()),
                 None => bail!("Can't find jwt. Please use the -jwt flag"),
             }
         }
@@ -327,82 +341,84 @@ impl Args {
         Ok(mime_type)
     }
 
-    pub fn get_payload(&self) -> Result<PipeReader> {
+    pub fn get_payload(&self) -> Result<(PipeReader, JoinHandle<Result<()>>)> {
         if !self.payload.exists() {
             bail!("The payload {:?} does not exist", self.payload);
         }
         let is_dir = self.payload.is_dir();
         let the_path = self.payload.to_path_buf();
 
-        let (read, mut write) = pipe();
+        let (read, write) = pipe();
 
-        thread::spawn(move || {
-            if is_dir {
-                let root_file_name = the_path.to_str().expect("Should be able to get root path");
-                let mut b = Builder::new(write);
-                let mut tar_path = PathBuf::new();
-                tar_path.push("data");
-                for v in &the_path {
-                    tar_path.push(v);
-                }
-                for file in WalkDir::new(&the_path).into_iter() {
-                    match file {
-                        Ok(f) => {
-                            if f.file_type().is_file() {
-                                let file_name = f
-                                    .clone()
+        let handle = thread::spawn(move || {
+            fn do_thing(is_dir: bool, the_path: PathBuf, mut write: PipeWriter) -> Result<()> {
+                if is_dir {
+                    let root_file_name = the_path
+                        .to_str()
+                        .context("Getting filename of directory passed in")?;
+                    let mut b = Builder::new(write);
+                    let mut tar_path = PathBuf::new();
+                    tar_path.push("data");
+                    for v in &the_path {
+                        tar_path.push(v);
+                    }
+                    for maybe_file in WalkDir::new(&the_path).into_iter() {
+                        let file = maybe_file?;
+                        if file.file_type().is_file() {
+                            let file_name = file
+                                .clone()
+                                .into_path()
+                                .to_str()
+                                .expect("Should get file name")
+                                .to_string();
+                            let trimmed_name = &file_name[root_file_name.len()..];
+                            let trimmed_name = if trimmed_name.starts_with("/") {
+                                &trimmed_name[1..]
+                            } else {
+                                trimmed_name
+                            };
+
+                            info!(
+                                "Appending {} to encrypted tar file, {} bytes",
+                                trimmed_name,
+                                file.clone()
                                     .into_path()
-                                    .to_str()
-                                    .expect("Should get file name")
-                                    .to_string();
-                                let trimmed_name = &file_name[root_file_name.len()..];
+                                    .metadata()
+                                    .unwrap()
+                                    .len()
+                                    .separate_with_commas()
+                            );
 
-                                info!(
-                                    "Appending {} to encrypted tar file, {} bytes",
-                                    trimmed_name,
-                                    f.clone()
-                                        .into_path()
-                                        .metadata()
-                                        .unwrap()
-                                        .len()
-                                        .separate_with_commas()
-                                );
-
-                                match b.append_path_with_name(f.into_path(), trimmed_name) {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        panic!("Failed to tar {:?}, error {:?}", the_path, e);
-                                    }
-                                };
-                            }
-                        }
-                        Err(e) => {
-                            error!("Walking directory failed {:?}", e);
+                            b.append_path_with_name(file.into_path(), trimmed_name)?;
                         }
                     }
-                }
-                info!("Finishing archiving");
-                let _ = b.finish();
-            } else {
-                if let Ok(mut f) = File::open(the_path) {
+                    info!("Finishing archiving");
+                    b.finish()?;
+                    Ok(())
+                } else {
+                    let mut f = File::open(the_path)?;
+
                     let mut in_buf = [0u8; 4096];
                     loop {
-                        if let Ok(len) = f.read(&mut in_buf) {
-                            if len == 0 {
-                                return;
-                            }
-                            if write.write_all(&mut in_buf[0..len]).is_err() {
-                                return;
-                            }
-                        } else {
-                            return;
+                        let len = f.read(&mut in_buf)?;
+                        if len == 0 {
+                            return Ok(());
                         }
+                        write.write_all(&mut in_buf[0..len])?
                     }
+                }
+            }
+
+            match do_thing(is_dir, the_path, write) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    info!("grrrrr, {:?}", e);
+                    Err(e)
                 }
             }
         });
 
-        Ok(read)
+        Ok((read, handle))
     }
 
     fn get_item_from_zip(&self, item_name: &str) -> Result<Option<String>> {
