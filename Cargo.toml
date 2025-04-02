@@ -1,6 +1,6 @@
 [package]
 name = "ginger"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 
 [dependencies]
@@ -17,7 +17,7 @@ thousands = "0.2.0"
 env_logger = "0.11"
 
 # http
-reqwest = { version = "0.12.5", features = [
+reqwest = { version = "0.12", features = [
     # "rustls-tls",
     "blocking",
     "gzip",
@@ -34,8 +34,9 @@ sha2 = "0.10.8"
 rand = "=0.8.5" # this must be kept to the version for rsa/openssl compatibility
 
 # Zip
-zip = {version="2.2", features=["deflate"]}
+zip = {version="2.5", features=["deflate"]}
 pipe = "0.4.0"
 tar = "0.4"
+walkdir = "2.5"
 
 chrono = "0.4"
