@@ -9,11 +9,14 @@ on:
     types: [completed]
     branches: [main]
    
-jobs:
+jobs:   
   check-version:
-    name: Ensure Git tag matches Cargo.toml version
+    name: Ensure GitHub Release & Cargo.toml Version Numbers Match
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Check Cargo version matches tag
         uses: spice-labs-inc/cargo-version-check@v0.0.2
 
