@@ -4,11 +4,23 @@ on:
   push:
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
-    
+  workflow_run:
+    workflows: ["Rust Build & Test"]
+    types: [completed]
+    branches: [main]
+   
 jobs:
+  check-version:
+    name: Ensure Git tag matches Cargo.toml version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Cargo version matches tag
+        uses: spice-labs-inc/cargo-version-check@v0.0.2
+
   push_to_registry:
     name: Push Docker image to Docker Hub and GHCR
     runs-on: ubuntu-latest
+    needs: check-version
 
     permissions:
       packages: write
