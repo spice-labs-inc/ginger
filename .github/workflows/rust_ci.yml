@@ -11,6 +11,9 @@ env:
 
 permissions:
   contents: read
+  packages: write
+  attestations: write
+  id-token: write
 
 jobs:
   build:
@@ -27,8 +30,27 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --release
 
       - name: Run tests
         run: cargo test --verbose
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image locally
+        run: |
+          docker build -t ghcr.io/spice-labs-inc/${{ github.event.repository.name }}:latest .
+
+      - name: Save Docker image locally
+        shell: bash
+        run: |
+          mkdir -p "${{ github.workspace }}/target/release"
+          docker save ghcr.io/spice-labs-inc/${{ github.event.repository.name }}:latest > "${{ github.workspace }}/target/release/ginger.oci.tar"
+
+      - name: Run Spice Grinder Scan
+        uses: spice-labs-inc/actions/spice_grinder_scan@action/spice-grinder
+        with:
+          token: ${{ secrets.GRINDER_JWT }}
+          file_path: "${{ github.workspace }}/target/release/"
 
