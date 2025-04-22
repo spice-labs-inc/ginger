@@ -4,7 +4,7 @@ on:
   push:
     tags: [ 'v*.*.*' ]
   workflow_run:
-    workflows: ["Rust Build & Test"]
+    workflows: ["01. Rust Build & Test"]
     types: [completed]
     branches: [main]
 
