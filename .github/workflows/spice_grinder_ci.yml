@@ -25,7 +25,7 @@ jobs:
 
       - name: Run Spice Grinder Scan
         uses: spice-labs-inc/actions/spice_grinder_scan@main
-        with
+        with: 
           token: ${{ secrets.GRINDER_JWT }}
           docker-image-tar-path: ./artifacts/ginger.tar
 
