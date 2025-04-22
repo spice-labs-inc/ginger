@@ -1,4 +1,4 @@
-name: Publish Rust Container Images
+name: 02. Publish Rust Container Images
 
 on:
   push:
@@ -116,4 +116,18 @@ jobs:
         with:
           name: docker-sbom
           path: /tmp/sbom.spdx.json
+
+      - name: Run Spice Grinder Scan
+        uses: spice-labs-inc/actions/spice_grinder_scan@main
+        with:
+          docker-image-tar-path: ginger.tar
+          token: ${{ secrets.GRINDER_JWT }}
+
+      - name: Upload Scan Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: spice-grinder-report
+          path: spice_grinder_report.json
+
+
 
