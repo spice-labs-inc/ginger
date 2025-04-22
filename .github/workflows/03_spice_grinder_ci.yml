@@ -6,12 +6,10 @@ on:
     types:
       - completed
 
-  # Allow manual triggers
-  workflow_dispatch:
+  workflow_dispatch:  # Allow manual triggers
 
-  # Optional: allow triggering directly on push to version tags
   push:
-    tags: [ 'v*.*.*' ]
+    tags: [ 'v*.*.*' ]  # Optional fallback trigger if needed
 
 jobs:
   scan:
@@ -24,11 +22,13 @@ jobs:
       security-events: write
 
     steps:
-      - name: Download Docker Image Artifact
+      - name: Download Docker Image Artifact from Previous Run
         uses: actions/download-artifact@v4
         with:
           name: docker-image
           path: ./artifacts
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Run Spice Grinder Scan
         uses: spice-labs-inc/actions/spice_grinder_scan@main
