@@ -49,6 +49,12 @@ jobs:
       - name: Build Project
         run: cargo build --release
 
+      - name: Run Spice Grinder Scan
+        uses: spice-labs-inc/grinder-scan-action@main
+        with:
+          file_path: "./"
+          spice_pass: ${{ secrets.SPICE_PASS }}
+
       - name: Log In to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -117,17 +123,9 @@ jobs:
           name: docker-sbom
           path: /tmp/sbom.spdx.json
 
-      - name: Extract Docker Image Tarball for Grinder Scan
-        run: mkdir -p output && tar -xf ginger.tar -C output
-
-      - name: Run Spice Grinder Scan
-        uses: spice-labs-inc/actions/spice_grinder_scan@dlp/cleanup
-        with:
-          spice_pass: ${{ secrets.GRINDER_JWT }}
-          file_path: output
-
       - name: Upload Scan Results
         uses: actions/upload-artifact@v4
         with:
           name: spice-grinder-report
           path: spice_grinder_report.json
+
