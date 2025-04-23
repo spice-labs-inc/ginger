@@ -1,0 +1,27 @@
+name: 03. Scan Docker Image with Spice Grinder
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    name: Scan Docker Image Tarball
+    runs-on: ubuntu-24.04
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Download Docker Image Artifact from Previous Run
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-artifacts
+          path: ./artifacts
+
+      - name: Run Spice Grinder Scan
+        uses: spice-labs-inc/grinder-scan-action@main
+        with:
+          token: ${{ secrets.GRINDER_JWT }}
+          file_path: ./artifacts
