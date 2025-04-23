@@ -1,15 +1,7 @@
 name: 03. Scan Docker Image with Spice Grinder
 
 on:
-  workflow_run:
-    workflows: ["02. Publish Rust Container Images"]
-    types:
-      - completed
-
-  workflow_dispatch:  # Allow manual triggers
-
-  push:
-    tags: [ 'v*.*.*' ]  # Optional fallback trigger if needed
+  workflow_dispatch:  # Only runs manually from the GitHub Actions UI
 
 jobs:
   scan:
@@ -27,8 +19,6 @@ jobs:
         with:
           name: docker-image
           path: ./artifacts
-          repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Run Spice Grinder Scan
         uses: spice-labs-inc/actions/spice_grinder_scan@action/spice-grinder
@@ -41,4 +31,5 @@ jobs:
         with:
           name: spice-grinder-report
           path: spice_grinder_report.json
+
 
