@@ -2,7 +2,7 @@ name: 01. Rust Build & Test
 
 on:
   push:
-    branches: [ "*" ]  # Match all branches
+    branches: ["**"]   # Match all branches
   pull_request:
     branches: [ "main" ]
 
