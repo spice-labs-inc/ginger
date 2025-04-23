@@ -1,7 +1,8 @@
 name: 03. Scan Docker Image with Spice Grinder
 
 on:
-  workflow_dispatch:
+  push:
+    branches: ["**"]   # Match all branches
 
 jobs:
   scan:
