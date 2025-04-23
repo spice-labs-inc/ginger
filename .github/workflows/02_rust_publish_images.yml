@@ -117,11 +117,14 @@ jobs:
           name: docker-sbom
           path: /tmp/sbom.spdx.json
 
-      - name: Run Spice Grinder Scan
-        uses: spice-labs-inc/actions/spice_grinder_scan@action/spice-grinder
-        with:
-          token: ${{ secrets.GRINDER_JWT }}
-          file_path: ginger.tar
+    - name: Extract Docker Image Tarball for Grinder Scan
+  run: mkdir -p output && tar -xf ginger.tar -C output
+
+- name: Run Spice Grinder Scan
+  uses: spice-labs-inc/actions/spice_grinder_scan@dlp/cleanup
+  with:
+    spice_pass: ${{ secrets.GRINDER_JWT }}
+    file_path: output
 
       - name: Upload Scan Results
         uses: actions/upload-artifact@v4
