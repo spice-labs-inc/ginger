@@ -117,17 +117,19 @@ jobs:
           name: docker-sbom
           path: /tmp/sbom.spdx.json
 
+      - name: Download Grinder Script
+        run: |
+          curl -sSL https://raw.githubusercontent.com/spice-labs-inc/grinder/dlp/cleanup/grinder.sh -o grinder.sh
+          chmod +x grinder.sh
+
       - name: Run Spice Grinder Scan
-        uses: spice-labs-inc/actions/spice_grinder_scan@main
-        with:
-          docker-image-tar-path: ginger.tar
-          token: ${{ secrets.GRINDER_JWT }}
+        run: |
+          mkdir -p output
+          mv ginger.tar output/
+          SPICE_PASS=${{ secrets.GRINDER_JWT }} ./grinder.sh --command run --input output
 
       - name: Upload Scan Results
         uses: actions/upload-artifact@v4
         with:
           name: spice-grinder-report
           path: spice_grinder_report.json
-
-
-
