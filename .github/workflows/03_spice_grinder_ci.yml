@@ -25,9 +25,3 @@ jobs:
         with:
           token: ${{ secrets.GRINDER_JWT }}
           file_path: ./artifacts
-
-      - name: Upload Scan Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: spice-grinder-report
-          path: spice_grinder_report.json
