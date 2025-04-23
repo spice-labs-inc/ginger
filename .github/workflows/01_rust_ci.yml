@@ -2,7 +2,7 @@ name: 01. Rust Build & Test
 
 on:
   push:
-    branches: ["**"]   # Match all branches
+    branches: ["**"]   # Match all branches 
   pull_request:
     branches: [ "main" ]
 
@@ -20,6 +20,9 @@ jobs:
 
       - name: Set Up Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: cargo build --verbose
