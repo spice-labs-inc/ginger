@@ -2,7 +2,7 @@ name: 02. Publish Rust Container Images
 
 on:
   push:
-    tags: [ 'v*.*.*' ]
+    tags: ['v*.*.*']
   workflow_run:
     workflows: ["01. Rust Build & Test"]
     types: [completed]
@@ -53,7 +53,7 @@ jobs:
         uses: spice-labs-inc/grinder-scan-action@main
         with:
           file_path: "./"
-          spice_pass: ${{ secrets.SPICE_PASS }}
+          token: ${{ secrets.GRINDER_JWT }}
 
       - name: Log In to Docker Hub
         uses: docker/login-action@v3
