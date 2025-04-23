@@ -1,7 +1,7 @@
 name: 03. Scan Docker Image with Spice Grinder
 
 on:
-  workflow_dispatch:  # Only runs manually from the GitHub Actions UI
+  workflow_dispatch:
 
 jobs:
   scan:
@@ -21,7 +21,7 @@ jobs:
           path: ./artifacts
 
       - name: Run Spice Grinder Scan
-        uses: spice-labs-inc/actions/spice_grinder_scan@action/spice-grinder
+        uses: spice-labs-inc/grinder-scan-action@main
         with:
           token: ${{ secrets.GRINDER_JWT }}
           file_path: ./artifacts
@@ -31,5 +31,4 @@ jobs:
         with:
           name: spice-grinder-report
           path: spice_grinder_report.json
-
-
+          
