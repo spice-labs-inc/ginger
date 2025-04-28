@@ -30,7 +30,7 @@ jobs:
       packages: write
       contents: read
       attestations: write
-      id-token: write
+      spice_pass: write
 
     steps:
       - name: Set Up Docker Buildx
