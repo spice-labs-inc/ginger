@@ -23,5 +23,5 @@ jobs:
       - name: Run Spice Grinder Scan
         uses: spice-labs-inc/grinder-scan-action@main
         with:
-          token: ${{ secrets.GRINDER_JWT }}
+          spice_pass: ${{ secrets.GRINDER_JWT }}
           file_path: ./artifacts
