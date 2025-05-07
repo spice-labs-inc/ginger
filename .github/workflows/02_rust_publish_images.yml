@@ -1,4 +1,4 @@
-name: 02. Publish Rust Container Images # ginger
+name: 02. Publish Rust Container Images
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
         uses: spice-labs-inc/action-check-version@main
 
   push_to_registry:
-    name: Push Docker Image to GHCR
+    name: Push Docker Image to Docker Hub and GHCR
     runs-on: ubuntu-24.04
     needs: check-version
     if: github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
