@@ -2,7 +2,6 @@ name: 02. Publish Rust Container Images
 
 on:
   push:
-    # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   workflow_run:
     workflows: ["Rust Build & Test"]
@@ -30,29 +29,12 @@ jobs:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       GH_USERNAME_SG: ${{ secrets.GH_USERNAME_SG }}
 
-  upload-binary:
-    name: Upload Compiled Binary
-    needs: build
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Download Binary from Build Job
-        uses: actions/download-artifact@v4
-        with:
-          name: ginger-binary
-          path: target/release
-
-      - name: Upload Binary Artifact for Later Jobs
-        uses: actions/upload-artifact@v4
-        with:
-          name: ginger-artifact
-          path: target/release/ginger
-
   publish-dockerhub:
     name: Publish to Docker Hub
     needs: build
     uses: spice-labs-inc/action-publish-image-dockerhub/.github/workflows/publish-dockerhub.yml@main
     with:
-      image_name: ginger
+      image_name: ${{ github.event.repository.name }}
       dockerfile: Dockerfile
       context: .
     secrets:
@@ -74,10 +56,16 @@ jobs:
     needs: publish-ghcr
     runs-on: ubuntu-24.04
     steps:
-      - name: Download Ginger Binary
+      - name: Download Compiled Binary
         uses: actions/download-artifact@v4
         with:
-          name: ginger-artifact
+          name: ginger-binary
+          path: target/release
+
+      - name: Download OCI Tar Image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-artifacts
           path: target/release
 
       - name: Run Spice Grinder Scan
@@ -96,5 +84,3 @@ jobs:
     secrets:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       GH_USERNAME: ${{ secrets.GH_USERNAME_SG }}
-
-        
