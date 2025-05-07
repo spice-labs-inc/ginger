@@ -96,7 +96,7 @@ jobs:
           docker save "$image_tag" > "${{ github.workspace }}/target/release/${{ github.event.repository.name }}.oci.tar"
 
       - name: Run Spice Grinder Scan
-        uses: spice-labs-inc/grinder-scan-action@main
+        uses: spice-labs-inc/action-grinder-scan@main
         with:
           spice_pass: ${{ secrets.GRINDER_JWT }}
           file_path: "${{ github.workspace }}/target/release/"
