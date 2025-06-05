@@ -89,6 +89,7 @@ jobs:
         id: push
         uses: docker/build-push-action@v6
         with:
+          platforms: ${{env.PLATFORMS}}
           context: .
           push: true
           provenance: mode=max
