@@ -1,5 +1,8 @@
 name: 02. Publish Rust Container Images # ginger
 
+env:
+  PLATFORMS: linux/amd64, linux/arm64
+
 on:
   push:
     # Publish semver tags as releases.
@@ -33,8 +36,13 @@ jobs:
       id-token: write
 
     steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set Up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+            platforms: ${{env.PLATFORMS}}
 
       - name: Checkout with LFS
         uses: actions/checkout@v4
@@ -74,11 +82,14 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+          flavor: |
+            latest=true
 
       - name: Build and Push Docker Image
         id: push
         uses: docker/build-push-action@v6
         with:
+          platforms: ${{env.PLATFORMS}}
           context: .
           push: true
           provenance: mode=max
