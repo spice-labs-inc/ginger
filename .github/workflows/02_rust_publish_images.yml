@@ -51,6 +51,8 @@ jobs:
 
       - name: Cache Cargo Dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
 
       - name: Build Project
         run: cargo build --release
