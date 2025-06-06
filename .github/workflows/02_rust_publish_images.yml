@@ -7,9 +7,7 @@ on:
   push:
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
-  workflow_run:
-    workflows: ["Rust Build & Test"]
-    types: [completed]
+  workflow_dispatch:
 
 jobs:
   check-version:
@@ -27,11 +25,10 @@ jobs:
     name: Push Docker Image to Docker Hub and GHCR
     runs-on: ubuntu-24.04
     needs: check-version
-    if: github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     permissions:
       packages: write
-      contents: read
+      contents: write
       attestations: write
       id-token: write
 
@@ -42,7 +39,7 @@ jobs:
       - name: Set Up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-            platforms: ${{env.PLATFORMS}}
+          platforms: ${{env.PLATFORMS}}
 
       - name: Checkout with LFS
         uses: actions/checkout@v4
@@ -54,6 +51,8 @@ jobs:
 
       - name: Cache Cargo Dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
 
       - name: Build Project
         run: cargo build --release
