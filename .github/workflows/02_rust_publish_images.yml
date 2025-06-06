@@ -39,7 +39,7 @@ jobs:
       - name: Set Up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-            platforms: ${{env.PLATFORMS}}
+          platforms: ${{env.PLATFORMS}}
 
       - name: Checkout with LFS
         uses: actions/checkout@v4
