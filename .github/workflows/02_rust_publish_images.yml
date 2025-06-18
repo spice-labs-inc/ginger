@@ -95,12 +95,6 @@ jobs:
           docker pull "$image_tag"
           docker save "$image_tag" > "${{ github.workspace }}/target/release/ginger.oci.tar"
 
-      - name: Run Spice Grinder Scan
-        uses: spice-labs-inc/grinder-scan-action@main
-        with:
-          spice_pass: ${{ secrets.GRINDER_JWT }}
-          file_path: "${{ github.workspace }}/target/release/"
-
       - name: Upload Docker Image and SBOM
         uses: actions/upload-artifact@v4
         with:
