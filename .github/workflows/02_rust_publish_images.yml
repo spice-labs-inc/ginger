@@ -1,11 +1,11 @@
-name: 02. Publish Rust Container Images # ginger
+name: 02. Publish Rust Container Image # ginger
 
 env:
-  PLATFORMS: linux/amd64, linux/arm64
+  PLATFORMS: linux/amd64,linux/arm64
 
 on:
   push:
-    # Publish semver tags as releases.
+    # Publish semver tags as releases
     tags: [ 'v*.*.*' ]
   workflow_dispatch:
 
@@ -21,13 +21,12 @@ jobs:
       - name: Check Cargo Version Matches Tag
         uses: spice-labs-inc/action-check-version@v1
 
-  push_to_registry:
-    name: Push Docker Image to Docker Hub and GHCR
+  push_to_dockerhub:
+    name: Push Docker Image to Docker Hub
     runs-on: ubuntu-24.04
     needs: check-version
 
     permissions:
-      packages: write
       contents: write
       attestations: write
       id-token: write
@@ -39,7 +38,7 @@ jobs:
       - name: Set Up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: ${{env.PLATFORMS}}
+          platforms: ${{ env.PLATFORMS }}
 
       - name: Checkout with LFS
         uses: actions/checkout@v4
@@ -63,32 +62,23 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Log In to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
-
       - name: Extract Metadata (Tags, Labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ghcr.io/spice-labs-inc/${{ github.event.repository.name }}
-            spicelabs/${{ github.event.repository.name }}
+          images: spicelabs/ginger
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
           flavor: |
-            latest=true
+            latest=auto
 
       - name: Build and Push Docker Image
         id: push
         uses: docker/build-push-action@v6
         with:
-          platforms: ${{env.PLATFORMS}}
+          platforms: ${{ env.PLATFORMS }}
           context: .
           push: true
           provenance: mode=max
@@ -122,6 +112,6 @@ jobs:
       - name: Generate Artifact Attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ghcr.io/spice-labs-inc/${{ github.event.repository.name }}
+          subject-name: spicelabs/ginger
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
